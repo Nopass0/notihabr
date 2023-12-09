@@ -6,6 +6,7 @@ import * as env from 'dotenv'
 
 env.config()
 
+let delayTime = Number(process.env.INTERVAL_DELAY) || 60000 // Default delay is 1 minute
 const db = new sqlite3.Database('freelanceBot.db')
 
 db.serialize(() => {
@@ -190,8 +191,13 @@ async function getFromDatabase() {
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN || '')
 
-// Обработчик события таймера
-setInterval(async () => {
+const getDelay = () => {
+  console.log(delayTime)
+
+  return Number(delayTime)
+}
+
+const loop = async () => {
   try {
     // Получение всех чатов, в которых участвует бот ( сохраненые в базе данных )
     const savedChats = await getSavedChatsFromDatabase()
@@ -203,13 +209,30 @@ setInterval(async () => {
   } catch (error) {
     console.error('Error while processing timer event:', error)
   }
-}, 60000) // Отправка каждую минуту
+  //wait getDelay()
+  setTimeout(loop, getDelay())
+}
 
+// Обработчик события таймера
+// setInterval(async () => {
+
+// }, getDelay()) // Отправка каждую минуту
+loop()
 // Обработчик события текстовых сообщений
 bot.on('text', async (ctx) => {
   try {
     // При написании любого текста в бот, сохранять его id в базу данных
     const chatId = ctx.chat.id
+
+    const newDelay = Number(ctx.message.text)
+    console.log(newDelay)
+
+    if (!isNaN(newDelay)) {
+      //   process.env.INTERVAL_DELAY = String(newDelay)
+      delayTime = Number(newDelay)
+      console.log(newDelay)
+    }
+
     await saveChatToDatabase(chatId)
   } catch (error) {
     console.error('Error while processing text event:', error)
@@ -219,13 +242,17 @@ bot.on('text', async (ctx) => {
 // Функция для сохранения чата в базе данных
 async function saveChatToDatabase(chatId: number) {
   return new Promise<void>((resolve, reject) => {
-    db.run('INSERT INTO chats (chatId) VALUES (?)', [chatId], (err) => {
-      if (err) {
-        reject(err)
-      } else {
-        resolve()
+    db.run(
+      'INSERT OR IGNORE INTO chats (chatId) VALUES (?)',
+      [chatId],
+      (err) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve()
+        }
       }
-    })
+    )
   })
 }
 
